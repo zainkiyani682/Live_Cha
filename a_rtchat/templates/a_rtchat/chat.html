@@ -1,0 +1,169 @@
+{% extends 'layouts/blank.html' %}
+
+{% block content %}
+
+<wrapper class="block max-w-2xl mx-auto my-10 px-6">
+    {% if chat_group.groupchat_name  %}
+    <div class="flex justify-between">
+    <h2>{{ chat_group.groupchat_name  }}</h2>
+        {% if user == chat_group.admin %}
+        <a href="{% url 'edit-chatroom' chat_group.group_name %}">
+        <div class="p-2 bg-gray-200 hover:bg-blue-600 rounded-lg group">
+            <svg class="fill-gray-500 group-hover:fill-white" width="16" height="16">
+                <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"></path>
+            </svg>
+            </div>
+            </a>
+        {% endif %}
+        </div>
+    {% endif %}
+
+    <div id="chat_window" class="h-[45rem] flex flex-col bg-gray-800 rounded-2xl shadow-2xl relative p-1">
+        <div class="flex justify-center text-emerald-400 bg-gray-800 p-2 sticky top-0 z-10">
+            {% if other_user %}
+            <div id="online-icon" class = "grey-dot absolute top-2 left-2" ></div>
+
+            <a href="{% url 'profile' other_user.username %}">
+                <div class="flex items-center gap-2 p-4 sticky top-0 z-0" >
+                    <img class = "w-10 h-10 rounded full object-cover" src="{{other_user.profile.avatar}}" >
+                    <div>
+                        <span class="font-bold text-white">{{other_user.profile.name}}</span>
+                        <span class="text-sm font-light text-gray-400">@{{other_user.username}}</span>
+                    </div>
+                </div>
+            </a>
+            {% elif chat_group.groupchat_name  %}
+            <ul id = "groupchat-members" class = "flex gap-4">
+                {% for member in chat_group.members.all %}
+                <li>
+                        <a href="{% url 'profile' member.username %}" class="flex flex-col text-gray-400 items-center justify-centerw-20 gap-2">
+                            <img src="{{member.profile.avatar}}" class="w-14 h-14 rounded-full object-cover" >
+                            {{ member.profile.name | slice:":10" }}
+
+                        </a>
+
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div id="online-icon"></div>
+            <span id="online-count" class="pr-1"></span>online
+            {% endif %}
+        </div>
+        <div id='chat_container' class="overflow-y-auto grow">
+            <ul id='chat_messages' class="flex flex-col justify-end gap-2 p-4">
+                {% for message in  chat_messages reversed %}
+                {% include 'a_rtchat/chat_message.html' %}
+                {% endfor %}
+            </ul>
+        </div>
+        <div class="sticky bottom-0 z-10 p-2 bg-gray-800">
+            <div class="flex items-center rounded-xl px-2 py-2">
+                <form id="chat_message_form" method='POST' class="w-full" hx-ext="ws" ws-connect = "/ws/chatroom/{{ chatroom_name }}" ws-send  _="on htmx:wsAfterSend reset() me">
+                    {% csrf_token %}
+                    {{form}}
+                </form>
+            </div>
+        </div>
+    </div>
+    {% if chat_group.members.exists %}
+    <!-- <a href="{% url 'chatroom-leave' chat_group.group_name %}">Leave</a> -->
+    {% endif %}
+</wrapper>
+
+
+{% endblock %}
+{% block javascript %}
+<script>
+
+    function scrollToBottom(){
+        const container = document.getElementById('chat_container');
+        container.scrollTop = container.scrollHeight
+
+    }
+    scrollToBottom()
+
+
+ </script>
+<!-- <script>
+const chatSocket = new WebSocket(`http://${window.location.host}/ws/chatroom/{{ chatroom_name }}`);
+
+// Listen for incoming messages
+chatSocket.onmessage = function(e) {
+    const data = e.data;
+
+    // Try parsing as HTML and replace message
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(data, 'text/html');
+    const newMessage = doc.body.firstElementChild;
+
+    if (newMessage && newMessage.dataset.messageId) {
+        const messageId = newMessage.dataset.messageId;
+        const oldMessage = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (oldMessage) {
+            oldMessage.replaceWith(newMessage);
+        } else {
+            document.querySelector('#chat-messages').appendChild(newMessage);
+        }
+    }
+};
+
+// Automatically mark visible messages as read
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const msgId = entry.target.dataset.messageId;
+            if (msgId && !entry.target.classList.contains('read')) {
+                chatSocket.send(JSON.stringify({
+                    'read_message_id': msgId
+                }));
+                entry.target.classList.add('read'); // Prevent duplicate sends
+            }
+        }
+    });
+}, { threshold: 1.0 });
+
+document.querySelectorAll('.chat-message').forEach(msg => {
+    observer.observe(msg);
+});
+</script> -->
+
+
+<!-- <script>
+document.addEventListener("DOMContentLoaded", () => {
+    const chatSocket = new WebSocket(`wss://${window.location.host}/ws/chatroom/{{ chatroom_name }}`);
+
+    chatSocket.onopen = () => {
+        console.log("WebSocket connection opened.");
+
+        const unreadMessageIds = Array.from(document.querySelectorAll('.chat-message[data-unread="true"]'))
+            .map(msg => msg.dataset.id);
+
+        if (unreadMessageIds.length) {
+            const message = JSON.stringify({ read_message_ids: unreadMessageIds });
+            console.log("Sending unread message IDs:", message);
+            chatSocket.send(message);
+        } else {
+            console.log("No unread messages to mark as read.");
+        }
+    };
+
+    chatSocket.onmessage = (event) => {
+        console.log("Message received from server:", event.data);
+        // You can optionally handle incoming messages here
+    };
+
+    chatSocket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+    };
+
+    chatSocket.onclose = (event) => {
+        console.warn("WebSocket connection closed:", event);
+    };
+});
+</script> -->
+
+
+
+
+{% endblock  %}
