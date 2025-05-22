@@ -24,6 +24,13 @@ class GroupMessage(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     read = models.BooleanField(default=False)
+    read_by = models.ManyToManyField(User, related_name='read_messages', blank=True)
+    delivered_to = models.ManyToManyField(User, related_name='delivered_messages', blank=True)
+
+    def is_fully_read(self):
+        total = self.group.members.exclude(id=self.author.id).count()
+        return self.read_by.exclude(id=self.author.id).count() == total
+    
 
     def __str__(self):
         return f'{self.author.username} : {self.body}'

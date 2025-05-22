@@ -162,7 +162,20 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 });
 </script> -->
-
+<!-- <script>
+socket.on("chat.message_status", (data) => {
+    const msgElement = document.querySelector(`#msg-${data.message_id}`);
+    
+    if (data.status === "read") {
+        msgElement.querySelector(".status").innerText = "Read";
+    } else if (data.status === "delivered") {
+        const currentStatus = msgElement.querySelector(".status").innerText;
+        if (currentStatus !== "Read") {
+            msgElement.querySelector(".status").innerText = "Delivered";
+        }
+    }
+});
+</script>  -->
 
 
 
