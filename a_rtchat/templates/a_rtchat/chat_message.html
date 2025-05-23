@@ -7,12 +7,8 @@
             <span>{{ message.body }}</span>
             <div class="text-xs text-gray-600 mt-1 text-right">
                 {{ message.created_at|date:"H:i" }} • 
-                {% if total_members == read_by_count %}
-                    <span class="status read">Read</span>
-                {% elif delivered_to_count > 0 %}
-                    <span class="status delivered">Delivered</span>
-                {% endif %}
-                            </div>
+                <span class="status {{ status }}">{{ status|default:'Delivered'|title }}</span>
+            </div>
         </div>
         <div class="flex items-end">
             <svg height="13" width="8">
@@ -37,11 +33,7 @@
                 <span>{{ message.body }}</span>
                 <div class="text-xs text-gray-500 mt-1 text-right">
                     {{ message.created_at|date:"H:i" }} • 
-                    {% if total_members == read_by_count %}
-                        <span class="status read">Read</span>
-                    {% elif delivered_to_count > 0 %}
-                        <span class="status delivered">Delivered</span>
-                    {% endif %}
+                    <span class="status {{ status }}">{{ status|default:'Delivered'|title }}</span>
                 </div>
             </div>
         </div>

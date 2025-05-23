@@ -61,38 +61,50 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
 
         elif 'read_message_id' in text_data_json:
             message_id = text_data_json['read_message_id']
+            print(f"[READ MESSAGE] User {self.user} read message {message_id}")
             await self.mark_message_as_read(message_id)
 
     async def message_handler(self, event):
         message_id = event['message_id']
         message = await self.get_message(message_id)
+        print("in message")
 
-        # Use sync_to_async to access the related field
         message_author = await sync_to_async(lambda: message.author)()
+        print(f"[MESSAGE HANDLER] Message author: {message_author}")
 
+        # Only mark as delivered if not the author and not already delivered
         if self.user != message_author:
             if not await self.is_message_delivered_to_user(message, self.user):
+                print(f"[DELIVERED] Message {message_id} delivered to {self.user}")
                 await self.add_message_to_delivered(message, self.user)
 
-            if self.user in await self.get_online_users():
-                await self.mark_message_as_read(message.id)
-
+        # Get group members excluding author
         group_members = await self.get_group_members_excluding_author(message)
         read_by_count = await self.get_read_by_count(message)
-        delivered_to_count = await self.get_delivered_to_count(message) + 1
+        delivered_to_count = await self.get_delivered_to_count(message)
+        total_members = len(group_members)
+        print(f"[MESSAGE HANDLER---] Read by count: {read_by_count}, Delivered to count: {delivered_to_count}, Total members: {total_members}")
+        # Status logic: Only non-author members count
+        if total_members > 0 and read_by_count == total_members:
+            status = "read"
+        elif delivered_to_count > 0:
+            status = "delivered"
+        else:
+            status = "sent"
 
         context = {
             'message': message,
-            'user': self.user,
+            'user': message.author,
             'chat_group': self.chatroom,
             'read_by_count': read_by_count,
             'delivered_to_count': delivered_to_count,
-            'total_members': len(group_members),
+            'total_members': total_members,
+            'status': status or "delivered"
         }
 
-        # Render the template asynchronously
         html = await sync_to_async(render_to_string)("a_rtchat/partials/chat_message_p.html", context)
         await self.send(text_data=html)
+
     async def broadcast_message_html(self, event):
             await self.send(text_data=event["html"])
 
@@ -109,7 +121,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
         )
 
     async def online_count_handler(self, event):
-        online_count = event['online_count']
+        online_count = event['online_count'] + 1
         print(f"[ONLINE COUNT HANDLER] Sending updated count: {online_count}")
 
         context = {
@@ -120,6 +132,19 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
         # Wrap render_to_string with sync_to_async
         html = await sync_to_async(render_to_string)("a_rtchat/partials/online_count.html", context)
         await self.send(text_data=html)
+
+    async def get_message_status(self, message):
+        group_members = await self.get_group_members_excluding_author(message)
+        read_by_count = await self.get_read_by_count(message)
+        delivered_to_count = await self.get_delivered_to_count(message)
+        total_members = len(group_members)
+        print(f"[MESSAGE STATUS] Read by count: {read_by_count}, Delivered to count: {delivered_to_count}, Total members: {total_members}")
+        if total_members > 0 and read_by_count == total_members:
+            return "read"
+        elif delivered_to_count > 0:
+            return "delivered"
+        else:
+            return "sent"
 
     async def mark_message_as_read(self, message_id):
         try:
@@ -136,21 +161,8 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
         # Add the user to the read_by list
         await self.add_message_to_read_by(message, user)
 
-        # Fetch the group and its members
-        group = await sync_to_async(lambda: message.group)()
-        group_members = await self.get_group_members(message)
-
-        # Determine the status (read or delivered)
-        if group.is_private:
-            if await self.get_read_by_count(message) == 2:  # Both users in a private chat have read the message
-                status = "read"
-            else:
-                status = "delivered"
-        else:
-            if set(await self.get_message_read_by(message)) == set(group_members):  # All group members have read
-                status = "read"
-            else:
-                status = "delivered"
+        # Consistent status calculation
+        status = await self.get_message_status(message)
 
         # Broadcast the status update to the group
         await self.channel_layer.group_send(
@@ -163,6 +175,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
         )
 
         print(f"[MESSAGE READ] Message {message_id} marked as {status} by {user.username}")
+
     async def chat_message_status(self, event):
         message_id = event['message_id']
         status = event['status']
@@ -170,26 +183,29 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
         # Fetch the message object
         message = await self.get_message(message_id)
 
-        # Prepare the context for rendering
+        # Consistent status calculation for rendering
+        group_members = await self.get_group_members_excluding_author(message)
+        read_by_count = await self.get_read_by_count(message)
+        delivered_to_count = await self.get_delivered_to_count(message)
+        total_members = len(group_members)
         context = {
             'message': message,
-            'user': self.user,
+            'user': message.author,
             'chat_group': self.chatroom,
-            'read_by_count': await self.get_read_by_count(message),
-            'delivered_to_count': await self.get_delivered_to_count(message),
+            'read_by_count': read_by_count,
+            'delivered_to_count': delivered_to_count,
+            'total_members': total_members,
             'status': status,
         }
-
-        # Render the updated message template asynchronously
         html = await sync_to_async(render_to_string)("a_rtchat/partials/chat_message_p.html", context)
-
-        # Send the updated message to the WebSocket
         await self.send(text_data=html)
+
     # Helper methods for async database operations
     async def get_chatroom(self, chatroom_name):
         return await ChatGroup.objects.filter(group_name=chatroom_name).afirst()
 
     async def get_online_users(self):
+        print(f"[GET ONLINE USERS] Fetching online users for {self.chatroom_name}")
         return await sync_to_async(list)(self.chatroom.user_online.all())
 
     async def add_online_user(self, user):
@@ -218,6 +234,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
     async def get_group_members_excluding_author(self, message):
         group = await sync_to_async(lambda: message.group)()
         return await sync_to_async(list)(group.members.exclude(id=message.author.id).all())
+
 
     async def get_read_by_count(self, message):
         author_id = await sync_to_async(lambda: message.author.id)()
