@@ -35,3 +35,17 @@ def user_postsave(sender, instance, created, **kwargs):
 def user_presave(sender, instance, **kwargs):
     if instance.username:
         instance.username = instance.username.lower()
+
+
+@receiver(post_save, sender=User)
+def update_account_email(sender, instance, created, **kwargs):
+    profile = instance
+    if not created:
+        try:
+            email_address = EmailAddress.objects.get_primary(profile)
+            if email_address.email != profile.email:
+                email_address.email = profile.email
+                email_address.verified = False
+                email_address.save()
+        except:
+            pass

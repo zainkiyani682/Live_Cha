@@ -15,7 +15,7 @@ from environ import Env
 env = Env()
 Env.read_env()
 ENVIORNMENT = env('ENVIORNMENT', default ="production")
-ENVIORNMENT = "production"
+# ENVIORNMENT = "production"
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -100,21 +100,29 @@ ASGI_APPLICATION = 'a_core.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+if ENVIORNMENT == "development":
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.parse(
+            env('DATABASE_URL')
+        )
+    }
 # DATABASES = {
 #     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'real_time_chat_db',
+#         'USER': 'postgres',
+#         'PASSWORD': 'Asdf1122',
+#         'HOST': 'localhost'
 #     }
 # }
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'real_time_chat_db',
-        'USER': 'postgres',
-        'PASSWORD': 'Asdf1122',
-        'HOST': 'localhost'
-    }
-}
 
 
 
@@ -154,6 +162,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [ BASE_DIR / 'static' ]
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media' 
@@ -162,14 +171,17 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGIN_REDIRECT_URL = '/'
 
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = env('EMAIL_ADDRESS')
-EMAIL_HOST_PASSWORD = 'jipg eshv sqbb yiah'
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+
 DEFAULT_FROM_EMAIL = f"Real-Time-Chat {env('EMAIL_ADDRESS')} "
+
+
+
 ACCOUNT_LOGIN_METHODS = {'email'}
 # ACCOUNT_EMAIL_REQUIRED = True
 # CHANNEL_LAYERS = {
@@ -177,11 +189,22 @@ ACCOUNT_LOGIN_METHODS = {'email'}
 #         "BACKEND": "channels.layers.InMemoryChannelLayer"
 #     }
 # }
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("localhost", 6379)],
+if ENVIORNMENT == 'development':
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [("localhost", 6379)],
+            },
         },
-    },
-}
+    }
+
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [(env('REDIS_URL'))],
+            },
+        },
+    }
