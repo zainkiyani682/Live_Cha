@@ -78,15 +78,23 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
                 print(f"[DELIVERED] Message {message_id} delivered to {self.user}")
                 await self.add_message_to_delivered(message, self.user)
 
-        # Get group members excluding author
-        group_members = await self.get_group_members_excluding_author(message)
+        # Get group and members
+        group = await sync_to_async(lambda: message.group)()
+        all_members = await sync_to_async(list)(group.members.all())
+        group_members = await sync_to_async(list)(group.members.exclude(id=message.author.id).all())
+        total_members = await sync_to_async(lambda: group.members.exclude(id=message.author.id).count())()
         read_by_count = await self.get_read_by_count(message)
         delivered_to_count = await self.get_delivered_to_count(message)
-        total_members = len(group_members)
+        read_by_users = await self.get_message_read_by(message)
+        print(f"[DEBUG] read_by users in message handler: {[u.username for u in read_by_users]}")
+        print(f"[DEBUG] All group members: {[m.username for m in all_members]}")
+        print(f"[DEBUG] Group members (excluding author): {[m.username for m in group_members]}")
+        print(f"[DEBUG] Author: {message.author.username}")
         print(f"[MESSAGE HANDLER---] Read by count: {read_by_count}, Delivered to count: {delivered_to_count}, Total members: {total_members}")
+
         # Status logic: Only non-author members count
-        if total_members > 0 and read_by_count == total_members:
-            status = "read"
+        if total_members > 0 and len(read_by_users) == total_members:
+             status = "read"
         elif delivered_to_count > 0:
             status = "delivered"
         else:
@@ -94,12 +102,13 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
 
         context = {
             'message': message,
-            'user': message.author,
+            'user': self.user,
             'chat_group': self.chatroom,
             'read_by_count': read_by_count,
             'delivered_to_count': delivered_to_count,
             'total_members': total_members,
-            'status': status or "delivered"
+            'status': status or "delivered",
+            'chatroom_name': self.chatroom_name,
         }
 
         html = await sync_to_async(render_to_string)("a_rtchat/partials/chat_message_p.html", context)
@@ -138,8 +147,10 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
         read_by_count = await self.get_read_by_count(message)
         delivered_to_count = await self.get_delivered_to_count(message)
         total_members = len(group_members)
+        read_by_users = await self.get_message_read_by(message)
+        print(f"[DEBUG] read_by users: {[u.username for u in read_by_users]}")
         print(f"[MESSAGE STATUS] Read by count: {read_by_count}, Delivered to count: {delivered_to_count}, Total members: {total_members}")
-        if total_members > 0 and read_by_count == total_members:
+        if total_members > 0 and len(read_by_users) == total_members:
             return "read"
         elif delivered_to_count > 0:
             return "delivered"
@@ -190,7 +201,7 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
         total_members = len(group_members)
         context = {
             'message': message,
-            'user': message.author,
+            'user': self.user,
             'chat_group': self.chatroom,
             'read_by_count': read_by_count,
             'delivered_to_count': delivered_to_count,
@@ -220,7 +231,13 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
     )
 
     async def create_message(self, body):
-        return await GroupMessage.objects.acreate(body=body, author=self.user, group=self.chatroom)
+        message = await GroupMessage.objects.acreate(body=body, author=self.user, group=self.chatroom)
+        # Mark as delivered to all online users except author
+        online_users = await self.get_online_users()
+        for user in online_users:
+            if user != self.user:
+                await self.add_message_to_delivered(message, user)
+        return message
 
     async def get_message(self, message_id):
         return await GroupMessage.objects.filter(id=message_id).afirst()
@@ -233,7 +250,8 @@ class ChatroomConsumer(AsyncWebsocketConsumer):
 
     async def get_group_members_excluding_author(self, message):
         group = await sync_to_async(lambda: message.group)()
-        return await sync_to_async(list)(group.members.exclude(id=message.author.id).all())
+        author_id = await sync_to_async(lambda: message.author.id)()
+        return await sync_to_async(list)(group.members.exclude(id=author_id).all())
 
 
     async def get_read_by_count(self, message):

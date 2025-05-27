@@ -75,109 +75,146 @@
 {% endblock %}
 {% block javascript %}
 <script>
+function scrollToBottom(){
+    const container = document.getElementById('chat_container');
+    container.scrollTop = container.scrollHeight
+}
 
-    function scrollToBottom(){
-        const container = document.getElementById('chat_container');
-        container.scrollTop = container.scrollHeight
+let messageQueue = [];
+let socketOpened = false;
 
-    }
-    scrollToBottom()
+// Only declare this ONCE
+const chatSocket = new WebSocket(
+    'ws://' + window.location.host + '/ws/chatroom/{{ chatroom_name }}'
+);
 
+console.log("WebSocket connecting to:", 'ws://' + window.location.host + '/ws/chatroom/{{ chatroom_name }}');
 
- </script>
+chatSocket.onopen = function() {
+    socketOpened = true;
+    console.log("WebSocket connection opened.");
+    // Send any queued messages
+    messageQueue.forEach(msg => {
+        console.log("Sending queued message:", msg);
+        chatSocket.send(msg);
+    });
+    messageQueue = [];
+    // Observe messages already in DOM on connect
+    observeAllMessages();
+};
 
-<!-- <script>
-const chatSocket = new WebSocket(`http://${window.location.host}/ws/chatroom/{{ chatroom_name }}`);
+chatSocket.onclose = function() {
+    console.log("WebSocket connection closed.");
+    socketOpened = false; // Update state on close
+};
 
-// Listen for incoming messages
-chatSocket.onmessage = function(e) {
-    const data = e.data;
+chatSocket.onerror = function(error) {
+    console.error("WebSocket error:", error);
+    socketOpened = false; // Update state on error
+};
 
-    // Try parsing as HTML and replace message
+// Handle incoming WebSocket messages (replace or append message in DOM)
+chatSocket.onmessage = function(event) {
     const parser = new DOMParser();
-    const doc = parser.parseFromString(data, 'text/html');
+    const doc = parser.parseFromString(event.data, 'text/html');
     const newMessage = doc.body.firstElementChild;
 
     if (newMessage && newMessage.dataset.messageId) {
         const messageId = newMessage.dataset.messageId;
-        const oldMessage = document.querySelector(`[data-message-id="${messageId}"]`);
+        let oldMessage = document.getElementById('message-' + messageId);
+
         if (oldMessage) {
+            // Replace existing message HTML
             oldMessage.replaceWith(newMessage);
+            console.log(`[WS MESSAGE] Replaced message ${messageId}`);
         } else {
-            document.querySelector('#chat-messages').appendChild(newMessage);
+            // Append new message HTML if it doesn't exist
+            document.querySelector('#chat_messages').appendChild(newMessage);
+            console.log(`[WS MESSAGE] Appended new message ${messageId}`);
         }
+
+        // Re-observe the message for read events after it's in the DOM
+        const messageInDom = document.getElementById('message-' + messageId);
+        if (messageInDom) {
+             // Ensure observer is attached only once or re-attached after replace
+             observer.unobserve(messageInDom); // Remove old observer if any
+             observer.observe(messageInDom);
+             console.log(`[OBSERVER] Re-attached observer for message ${messageId}`);
+        }
+
+        // Scroll to bottom if the new message is at the end or near the end
+        scrollToBottom();
     }
 };
 
-// Automatically mark visible messages as read
+// Intersection Observer to detect when a message is visible
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
-        if (entry.isIntersecting) {
+        // Check if the message is visible and hasn't been marked as read yet by this observer
+        if (entry.isIntersecting && entry.target.dataset.read !== 'true') {
             const msgId = entry.target.dataset.messageId;
-            if (msgId && !entry.target.classList.contains('read')) {
-                chatSocket.send(JSON.stringify({
+            if (msgId) {
+                const msg = JSON.stringify({
                     'read_message_id': msgId
-                }));
-                entry.target.classList.add('read'); // Prevent duplicate sends
+                });
+                if (socketOpened && chatSocket.readyState === WebSocket.OPEN) {
+                    console.log("Sending read event for message:", msgId);
+                    chatSocket.send(msg);
+                    // Mark message element in DOM as read to prevent re-sending
+                    entry.target.dataset.read = 'true';
+                    entry.target.classList.add('read'); // Add a class for styling if needed
+                     // Stop observing after sending read event
+                    observer.unobserve(entry.target);
+                    console.log("[OBSERVER] Stopped observing message after sending read event:", msgId);
+
+                } else {
+                    console.log("Socket not open, queueing read event for message:", msgId);
+                    messageQueue.push(msg);
+                }
             }
         }
     });
 }, { threshold: 1.0 });
 
-document.querySelectorAll('.chat-message').forEach(msg => {
-    observer.observe(msg);
-});
-</script> -->
+// Attach observer to all messages currently in the DOM
+function observeAllMessages() {
+    console.log("Observing all chat messages initially.");
+    document.querySelectorAll('.chat-message').forEach(msg => {
+         // Only observe if not already marked as read
+         if(msg.dataset.read !== 'true'){
+            observer.observe(msg);
+         }
+    });
+     console.log("Finished observing initial chat messages.");
 
+}
 
-<!-- <script>
-document.addEventListener("DOMContentLoaded", () => {
-    const chatSocket = new WebSocket(`wss://${window.location.host}/ws/chatroom/{{ chatroom_name }}`);
-
-    chatSocket.onopen = () => {
-        console.log("WebSocket connection opened.");
-
-        const unreadMessageIds = Array.from(document.querySelectorAll('.chat-message[data-unread="true"]'))
-            .map(msg => msg.dataset.id);
-
-        if (unreadMessageIds.length) {
-            const message = JSON.stringify({ read_message_ids: unreadMessageIds });
-            console.log("Sending unread message IDs:", message);
-            chatSocket.send(message);
+// Remove duplicate messages on page load and after updates (robustness)
+function removeDuplicateMessages() {
+    console.log("Removing duplicate messages.");
+    const seen = new Set();
+    const messages = document.querySelectorAll('.chat-message');
+    // Process messages in reverse to keep the latest version
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        const msgId = msg.dataset.messageId;
+        if (seen.has(msgId)) {
+            console.log("Removing duplicate message with ID:", msgId);
+            msg.remove();
         } else {
-            console.log("No unread messages to mark as read.");
-        }
-    };
-
-    chatSocket.onmessage = (event) => {
-        console.log("Message received from server:", event.data);
-        // You can optionally handle incoming messages here
-    };
-
-    chatSocket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-    };
-
-    chatSocket.onclose = (event) => {
-        console.warn("WebSocket connection closed:", event);
-    };
-});
-</script> -->
-<!-- <script>
-socket.on("chat.message_status", (data) => {
-    const msgElement = document.querySelector(`#msg-${data.message_id}`);
-    
-    if (data.status === "read") {
-        msgElement.querySelector(".status").innerText = "Read";
-    } else if (data.status === "delivered") {
-        const currentStatus = msgElement.querySelector(".status").innerText;
-        if (currentStatus !== "Read") {
-            msgElement.querySelector(".status").innerText = "Delivered";
+            seen.add(msgId);
         }
     }
-});
-</script>  -->
+     console.log("Finished removing duplicate messages.");
 
+}
 
+// Initial setup on page load
+removeDuplicateMessages();
+// observeAllMessages(); // Called on socket open now
 
-{% endblock  %}
+// You might need to call observeAllMessages() and removeDuplicateMessages() if you use htmx or AJAX to load *initial* messages dynamically after the page loads.
+// If your initial messages are rendered server-side in the loop like in the template, observerAllMessages() on socket open is sufficient.
+
+</script>
+{% endblock %}
