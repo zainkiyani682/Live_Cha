@@ -100,21 +100,21 @@ ASGI_APPLICATION = 'a_core.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
 # DATABASES = {
 #     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'real_time_chat_db',
-#         'USER': 'postgres',
-#         'PASSWORD': 'Asdf1122',
-#         'HOST': 'localhost'
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'real_time_chat_db',
+        'USER': 'postgres',
+        'PASSWORD': 'Asdf1122',
+        'HOST': 'localhost'
+    }
+}
 
 
 
