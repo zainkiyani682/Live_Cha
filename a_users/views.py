@@ -8,6 +8,21 @@ from django.contrib.auth.views import redirect_to_login
 from django.contrib import messages
 from .forms import *
 
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect('home')
+    return render(request, 'account/login.html')
+
+def signup_view(request):
+    if request.user.is_authenticated:
+        return redirect('home')
+    return render(request, 'account/signup.html')
+
+def logout_view(request):
+    logout(request)
+    messages.success(request, 'You have been successfully logged out.')
+    return redirect('home')
+
 def profile_view(request, username=None):
     if username:
         profile = get_object_or_404(User, username=username).profile

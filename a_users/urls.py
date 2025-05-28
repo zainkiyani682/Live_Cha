@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from a_users.views import *
 
 urlpatterns = [
@@ -11,4 +11,5 @@ urlpatterns = [
     path('emailverify/', profile_emailverify, name="profile-emailverify"),
     path('profile/verify-email/', profile_verify_email, name="profile-verify-email"),
     path('delete/', profile_delete_view, name="profile-delete"),
+    path('accounts/', include('allauth.urls')),
 ]
