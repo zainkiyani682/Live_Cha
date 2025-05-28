@@ -67,16 +67,20 @@
                         <li><a href="{% url 'profile' %}">My Profile</a></li>
                         <li><a href="{% url 'profile-edit' %}">Edit Profile</a></li>
                         <li><a href="{% url 'new-groupchat' %}">Create Chat</a></li>
-
                         <li><a href="{% url 'profile-settings' %}">Settings</a></li>
-                        <li><a href="{% url 'account_logout' %}">Log Out</a></li>
+                        <li>
+                            <form method="post" action="{% url 'account_logout' %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="w-full text-left px-4 py-2 hover:bg-gray-100">Log Out</button>
+                            </form>
+                        </li>
                     </ul>
                 </div>
             </li>
             
             {% else %}
-            <li><a href="{% url 'account_login' %}">Login</a></li>
-            <li><a href="{% url 'account_signup' %}?next={% url 'profile-onboarding' %}">Signup</a></li>
+            <li><a href="{% url 'account_login' %}" class="hover:text-gray-300 transition-colors duration-200">Login</a></li>
+            <li><a href="{% url 'account_signup' %}?next={% url 'profile-onboarding' %}" class="hover:text-gray-300 transition-colors duration-200">Signup</a></li>
             {% endif %}
         </ul>
     </nav>
